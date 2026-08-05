@@ -1,0 +1,57 @@
+import { auth } from '$lib/auth';
+import { error, json } from '@sveltejs/kit';
+import { db } from '$lib/server/db';
+import { userFriend, user } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
+import { getFollowingIdsSet, getFriendIdsSet } from '$lib/server/friends';
+import type { RequestHandler } from './$types';
+
+// v1: no offset pagination yet, just a sane limit. See followers/+server.ts for the same note.
+const DEFAULT_LIMIT = 50;
+
+export const GET: RequestHandler = async ({ request, params, url }) => {
+	const targetUsername = params.username;
+	const limit = Math.min(Number(url.searchParams.get('limit')) || DEFAULT_LIMIT, 100);
+
+	const [targetUser] = await db
+		.select({ id: user.id })
+		.from(user)
+		.where(eq(user.username, targetUsername))
+		.limit(1);
+
+	if (!targetUser) throw error(404, 'User not found');
+
+	const friends = await db
+		.select({
+			id: user.id,
+			username: user.username,
+			name: user.name,
+			image: user.image,
+			nameColor: user.nameColor,
+			friendedAt: userFriend.createdAt
+		})
+		.from(userFriend)
+		.innerJoin(user, eq(userFriend.friendId, user.id))
+		.where(eq(userFriend.userId, targetUser.id))
+		.orderBy(userFriend.createdAt)
+		.limit(limit);
+
+	const session = await auth.api.getSession({ headers: request.headers });
+	let viewerFollowingSet = new Set<number>();
+	let viewerFriendSet = new Set<number>();
+	if (session?.user) {
+		const viewerId = Number(session.user.id);
+		[viewerFollowingSet, viewerFriendSet] = await Promise.all([
+			getFollowingIdsSet(viewerId),
+			getFriendIdsSet(viewerId)
+		]);
+	}
+
+	return json({
+		friends: friends.map((f) => ({
+			...f,
+			viewerIsFollowing: viewerFollowingSet.has(f.id),
+			viewerIsFriend: viewerFriendSet.has(f.id)
+		}))
+	});
+};
