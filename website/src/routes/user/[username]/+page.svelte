@@ -3,6 +3,14 @@
 	import * as Avatar from '$lib/components/ui/avatar';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import {
+		Dialog,
+		DialogContent,
+		DialogHeader,
+		DialogTitle,
+		DialogDescription,
+		DialogFooter
+	} from '$lib/components/ui/dialog';
 	import DataTable from '$lib/components/self/DataTable.svelte';
 	import ProfileBadges from '$lib/components/self/ProfileBadges.svelte';
 	import UserName from '$lib/components/self/UserName.svelte';
@@ -22,7 +30,11 @@
 		PercentIcon,
 		Invoice03Icon,
 		Award05Icon,
-		UnavailableIcon
+		UnavailableIcon,
+		UserAdd01Icon,
+		UserCheck01Icon,
+		Cancel01Icon,
+		Loading03Icon
 	} from '@hugeicons/core-free-icons';
 	import { goto } from '$app/navigation';
 	import { USER_DATA } from '$lib/stores/user-data';
@@ -84,10 +96,184 @@
 		}
 	}
 
+	// Follow state - initialized from profileData.profile.viewerIsFollowing, which the
+	// profile load already returns, so no extra round-trip is needed on mount.
+	let isFollowing = $state(false);
+	let followLoading = $state(false);
+
+	// Friend state - driven by profileData.profile.viewerFriendshipStatus.
+	let friendshipStatus = $state<'none' | 'friends' | 'pending_outgoing' | 'pending_incoming'>(
+		'none'
+	);
+	let friendActionLoading = $state(false);
+	let relevantRequestId = $state<number | null>(null);
+	let showUnfriendConfirm = $state(false);
+	let unfriendLoading = $state(false);
+
+	$effect(() => {
+		isFollowing = profileData?.profile?.viewerIsFollowing ?? false;
+		friendshipStatus = profileData?.profile?.viewerFriendshipStatus ?? 'none';
+	});
+
+	async function resolveRequestId() {
+		if (friendshipStatus !== 'pending_outgoing' && friendshipStatus !== 'pending_incoming') {
+			relevantRequestId = null;
+			return;
+		}
+		try {
+			const res = await fetch('/api/friend-requests');
+			if (!res.ok) return;
+			const data = await res.json();
+			const list = friendshipStatus === 'pending_outgoing' ? data.outgoing : data.incoming;
+			const match = (list || []).find((r: any) => r.user.username === username);
+			relevantRequestId = match?.id ?? null;
+		} catch {
+			relevantRequestId = null;
+		}
+	}
+
+	async function toggleFollow() {
+		if (!$USER_DATA || isOwnProfile || followLoading) return;
+		followLoading = true;
+		try {
+			const res = await fetch(`/api/user/${username}/follow`, {
+				method: isFollowing ? 'DELETE' : 'POST'
+			});
+			if (res.ok) {
+				isFollowing = !isFollowing;
+				haptic.trigger(isFollowing ? 'success' : 'light');
+				toast.success(isFollowing ? 'Following' : 'Unfollowed');
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to update follow status');
+			}
+		} catch {
+			toast.error('Failed to update follow status');
+		} finally {
+			followLoading = false;
+		}
+	}
+
+	async function sendFriendRequest() {
+		if (!$USER_DATA || isOwnProfile || friendActionLoading) return;
+		friendActionLoading = true;
+		try {
+			const res = await fetch(`/api/user/${username}/friend-request`, { method: 'POST' });
+			const data = await res.json();
+			if (res.ok) {
+				if (data.status === 'accepted') {
+					friendshipStatus = 'friends';
+					haptic.trigger('success');
+					toast.success("You're now friends!");
+				} else {
+					friendshipStatus = 'pending_outgoing';
+					haptic.trigger('light');
+					toast.success('Friend request sent');
+					await resolveRequestId();
+				}
+			} else {
+				toast.error(data.message || 'Failed to send friend request');
+			}
+		} catch {
+			toast.error('Failed to send friend request');
+		} finally {
+			friendActionLoading = false;
+		}
+	}
+
+	async function cancelFriendRequest() {
+		if (!relevantRequestId || friendActionLoading) return;
+		friendActionLoading = true;
+		try {
+			const res = await fetch(`/api/friend-requests/${relevantRequestId}`, { method: 'DELETE' });
+			if (res.ok) {
+				friendshipStatus = 'none';
+				relevantRequestId = null;
+				haptic.trigger('light');
+				toast.success('Friend request cancelled');
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to cancel friend request');
+			}
+		} catch {
+			toast.error('Failed to cancel friend request');
+		} finally {
+			friendActionLoading = false;
+		}
+	}
+
+	async function acceptFriendRequest() {
+		if (!relevantRequestId || friendActionLoading) return;
+		friendActionLoading = true;
+		try {
+			const res = await fetch(`/api/friend-requests/${relevantRequestId}/accept`, {
+				method: 'POST'
+			});
+			if (res.ok) {
+				friendshipStatus = 'friends';
+				relevantRequestId = null;
+				haptic.trigger('success');
+				toast.success("You're now friends!");
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to accept friend request');
+			}
+		} catch {
+			toast.error('Failed to accept friend request');
+		} finally {
+			friendActionLoading = false;
+		}
+	}
+
+	async function declineFriendRequest() {
+		if (!relevantRequestId || friendActionLoading) return;
+		friendActionLoading = true;
+		try {
+			const res = await fetch(`/api/friend-requests/${relevantRequestId}/decline`, {
+				method: 'POST'
+			});
+			if (res.ok) {
+				friendshipStatus = 'none';
+				relevantRequestId = null;
+				haptic.trigger('light');
+				toast.success('Friend request declined');
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to decline friend request');
+			}
+		} catch {
+			toast.error('Failed to decline friend request');
+		} finally {
+			friendActionLoading = false;
+		}
+	}
+
+	async function confirmUnfriend() {
+		if (unfriendLoading) return;
+		unfriendLoading = true;
+		try {
+			const res = await fetch(`/api/user/${username}/friend`, { method: 'DELETE' });
+			if (res.ok) {
+				friendshipStatus = 'none';
+				haptic.trigger('warning');
+				toast.success('Unfriended');
+				showUnfriendConfirm = false;
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to unfriend');
+			}
+		} catch {
+			toast.error('Failed to unfriend');
+		} finally {
+			unfriendLoading = false;
+		}
+	}
+
 	onMount(async () => {
 		previousUsername = username;
 		fetchAchievements();
 		checkBlockStatus();
+		resolveRequestId();
 
 		if (isOwnProfile) {
 			await fetchTransactions();
@@ -99,6 +285,7 @@
 			userAchievements = [];
 			fetchAchievements();
 			checkBlockStatus();
+			resolveRequestId();
 			previousUsername = username;
 		}
 	});
@@ -484,9 +671,85 @@
 							<span>Joined {memberSince}</span>
 						</div>
 
+						<div class="text-muted-foreground mt-3 flex items-center gap-4 text-sm">
+							<button
+								class="hover:text-foreground transition-colors"
+								onclick={() => goto(`/user/${username}/followers`)}
+							>
+								<span class="text-foreground font-semibold">{profileData.profile.followerCount}</span>
+								Followers
+							</button>
+							<button
+								class="hover:text-foreground transition-colors"
+								onclick={() => goto(`/user/${username}/following`)}
+							>
+								<span class="text-foreground font-semibold">{profileData.profile.followingCount}</span>
+								Following
+							</button>
+							<button
+								class="hover:text-foreground transition-colors"
+								onclick={() => goto(isOwnProfile ? '/friends' : `/user/${username}/followers`)}
+							>
+								<span class="text-foreground font-semibold">{profileData.profile.friendCount}</span>
+								Friends
+							</button>
+						</div>
+
 					</div>
 					{#if $USER_DATA && !isOwnProfile}
-						<div class="ml-auto self-start">
+						<div class="ml-auto flex items-start gap-2 self-start">
+							<Button
+								variant={isFollowing ? 'outline' : 'default'}
+								size="sm"
+								onclick={toggleFollow}
+								disabled={followLoading}
+							>
+								{isFollowing ? 'Following' : 'Follow'}
+							</Button>
+
+							{#if friendshipStatus === 'none'}
+								<Button variant="outline" size="sm" onclick={sendFriendRequest} disabled={friendActionLoading}>
+									<HugeiconsIcon icon={UserAdd01Icon} class="h-4 w-4" />
+									Add Friend
+								</Button>
+							{:else if friendshipStatus === 'pending_outgoing'}
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={cancelFriendRequest}
+									disabled={friendActionLoading || !relevantRequestId}
+									class="group"
+								>
+									<span class="group-hover:hidden">Request Sent</span>
+									<span class="hidden items-center gap-1 group-hover:flex">
+										<HugeiconsIcon icon={Cancel01Icon} class="h-4 w-4" />
+										Cancel
+									</span>
+								</Button>
+							{:else if friendshipStatus === 'pending_incoming'}
+								<Button
+									variant="default"
+									size="sm"
+									onclick={acceptFriendRequest}
+									disabled={friendActionLoading || !relevantRequestId}
+								>
+									Accept
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={declineFriendRequest}
+									disabled={friendActionLoading || !relevantRequestId}
+								>
+									Decline
+								</Button>
+							{:else if friendshipStatus === 'friends'}
+								<Button variant="outline" size="sm" onclick={() => (showUnfriendConfirm = true)}>
+									<HugeiconsIcon icon={UserCheck01Icon} class="h-4 w-4" />
+									Friends
+								</Button>
+							{/if}
+
 							<Tooltip.Provider>
 								<Tooltip.Root>
 									<Tooltip.Trigger>
@@ -508,6 +771,33 @@
 				</div>
 			</Card.Content>
 		</Card.Root>
+
+		<Dialog bind:open={showUnfriendConfirm}>
+			<DialogContent class="sm:max-w-md">
+				<DialogHeader>
+					<DialogTitle>Unfriend @{username}?</DialogTitle>
+					<DialogDescription>
+						You'll no longer be friends, and cash transfers between you will no longer be
+						fee-free. This won't affect any following relationship between you.
+					</DialogDescription>
+				</DialogHeader>
+				<DialogFooter class="flex gap-2">
+					<Button
+						variant="outline"
+						onclick={() => (showUnfriendConfirm = false)}
+						disabled={unfriendLoading}
+					>
+						Cancel
+					</Button>
+					<Button variant="destructive" onclick={confirmUnfriend} disabled={unfriendLoading}>
+						{#if unfriendLoading}
+							<HugeiconsIcon icon={Loading03Icon} class="h-4 w-4 animate-spin" />
+						{/if}
+						Unfriend
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 
 		<!-- Main Portfolio Stats -->
 		<div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
