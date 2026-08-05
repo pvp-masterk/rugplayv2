@@ -1,7 +1,5 @@
-import { PUBLIC_B2_BUCKET, PUBLIC_B2_ENDPOINT } from "$env/static/public";
 import { error } from '@sveltejs/kit';
-
-const EXPECTED_HOST = new URL(PUBLIC_B2_ENDPOINT).hostname;
+import { generateDownloadUrl } from '$lib/server/s3.js';
 
 export async function GET({ params, request }) {
     const path = params.path;
@@ -14,14 +12,9 @@ export async function GET({ params, request }) {
         throw error(400, 'Invalid path');
     }
 
-    const s3Url = `${PUBLIC_B2_ENDPOINT}/${PUBLIC_B2_BUCKET}/${path}`;
-
-    if (new URL(s3Url).hostname !== EXPECTED_HOST) {
-        throw error(400, 'Invalid path');
-    }
-
     try {
-        const response = await fetch(s3Url);
+        const signedUrl = await generateDownloadUrl(path);
+        const response = await fetch(signedUrl);
 
         if (!response.ok) {
             throw error(response.status, 'Failed to fetch from S3');
