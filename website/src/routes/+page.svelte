@@ -1,195 +1,330 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
+	import * as Avatar from '$lib/components/ui/avatar';
+	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
-	import { getTimeBasedGreeting, formatPrice, formatMarketCap } from '$lib/utils';
-	import { USER_DATA } from '$lib/stores/user-data';
-	import SignInConfirmDialog from '$lib/components/self/SignInConfirmDialog.svelte';
-	import CoinIcon from '$lib/components/self/CoinIcon.svelte';
-	import DataTable from '$lib/components/self/DataTable.svelte';
-	import HomeSkeleton from '$lib/components/self/skeletons/HomeSkeleton.svelte';
-	import SeasonCard from '$lib/components/self/SeasonCard.svelte';
 	import SEO from '$lib/components/self/SEO.svelte';
+	import UserName from '$lib/components/self/UserName.svelte';
+	import SendMoneyModal from '$lib/components/self/SendMoneyModal.svelte';
+	import { getPublicUrl, formatDate } from '$lib/utils';
+	import { HugeiconsIcon } from '@hugeicons/svelte';
+	import {
+		UserGroupIcon,
+		SentIcon,
+		Cancel01Icon,
+		Tick01Icon,
+		Loading03Icon
+	} from '@hugeicons/core-free-icons';
 	import { onMount } from 'svelte';
-	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
+	import { USER_DATA } from '$lib/stores/user-data';
+	import { toast } from 'svelte-sonner';
+	import { haptic } from '$lib/stores/haptics';
+	import { PENDING_REQUEST_COUNT } from '$lib/stores/friend-requests';
 
-	let shouldSignIn = $state(false);
-	let coins = $state<any[]>([]);
+	type FriendRow = {
+		id: number;
+		username: string;
+		name: string;
+		image: string | null;
+		nameColor: string | null;
+		friendedAt: string;
+	};
+
+	type RequestRow = {
+		id: number;
+		createdAt: string;
+		user: { id: number; username: string; name: string; image: string | null; nameColor: string | null };
+	};
+
 	let loading = $state(true);
-	let seasonData = $state<any>(null);
+	let friends = $state<FriendRow[]>([]);
+	let incoming = $state<RequestRow[]>([]);
+	let outgoing = $state<RequestRow[]>([]);
+
+	let activeTab = $state<'friends' | 'requests'>('friends');
+	let requestActionLoadingIds = $state<number[]>([]);
+
+	let sendMoneyModalOpen = $state(false);
+	let sendMoneyTarget = $state('');
+
+	const tabs = [
+		{ value: 'friends', label: 'Friends' },
+		{ value: 'requests', label: 'Requests' }
+	];
+
+	async function loadFriends() {
+		if (!$USER_DATA) return;
+		try {
+			const res = await fetch(`/api/user/${$USER_DATA.username}/friends`);
+			if (res.ok) {
+				const data = await res.json();
+				friends = data.friends || [];
+			} else {
+				toast.error('Failed to load friends');
+			}
+		} catch {
+			toast.error('Failed to load friends');
+		}
+	}
+
+	async function loadRequests() {
+		try {
+			const res = await fetch('/api/friend-requests');
+			if (res.ok) {
+				const data = await res.json();
+				incoming = data.incoming || [];
+				outgoing = data.outgoing || [];
+				PENDING_REQUEST_COUNT.set(data.pendingRequestCount ?? incoming.length);
+			} else {
+				toast.error('Failed to load friend requests');
+			}
+		} catch {
+			toast.error('Failed to load friend requests');
+		}
+	}
 
 	onMount(async () => {
-		try {
-			const [coinResult, loadedSeasonData] = await Promise.all([
-				fetch('/api/coins/top').then(async (response) => {
-					if (!response.ok) throw new Error('Failed to load coins');
-					return response.json();
-				}),
-				fetch('/api/season')
-					.then((response) => (response.ok ? response.json() : null))
-					.catch((e) => {
-						console.error('Failed to fetch season:', e);
-						return null;
-					})
-			]);
-
-			coins = coinResult.coins;
-			seasonData = loadedSeasonData;
-		} catch (e) {
-			console.error('Failed to fetch coins:', e);
-			toast.error('Failed to load coins');
-		} finally {
-			loading = false;
+		if (!$USER_DATA) {
+			goto('/');
+			return;
 		}
+		loading = true;
+		await Promise.all([loadFriends(), loadRequests()]);
+		loading = false;
 	});
-	const marketColumns = [
-		{
-			key: 'name',
-			label: 'Name',
-			class: 'font-medium',
-			render: (value: any, row: any) => {
-				return {
-					component: 'coin',
-					icon: row.icon,
-					symbol: row.symbol,
-					name: row.name,
-					size: 6
-				};
+
+	async function acceptRequest(request: RequestRow) {
+		if (requestActionLoadingIds.includes(request.id)) return;
+		requestActionLoadingIds = [...requestActionLoadingIds, request.id];
+		try {
+			const res = await fetch(`/api/friend-requests/${request.id}/accept`, { method: 'POST' });
+			if (res.ok) {
+				incoming = incoming.filter((r) => r.id !== request.id);
+				PENDING_REQUEST_COUNT.set(incoming.length);
+				haptic.trigger('success');
+				toast.success(`You're now friends with @${request.user.username}!`);
+				loadFriends();
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to accept friend request');
 			}
-		},
-		{
-			key: 'price',
-			label: 'Price',
-			render: (value: any) => `$${formatPrice(value)}`
-		},
-		{
-			key: 'change24h',
-			label: '24h Change',
-			render: (value: any) => ({
-				component: 'badge',
-				variant: value >= 0 ? 'success' : 'destructive',
-				text: `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
-			})
-		},
-		{
-			key: 'marketCap',
-			label: 'Market Cap',
-			render: (value: any) => formatMarketCap(value)
-		},
-		{
-			key: 'volume24h',
-			label: 'Volume (24h)',
-			render: (value: any) => formatMarketCap(value)
+		} catch {
+			toast.error('Failed to accept friend request');
+		} finally {
+			requestActionLoadingIds = requestActionLoadingIds.filter((id) => id !== request.id);
 		}
-	];
+	}
+
+	async function declineRequest(request: RequestRow) {
+		if (requestActionLoadingIds.includes(request.id)) return;
+		requestActionLoadingIds = [...requestActionLoadingIds, request.id];
+		try {
+			const res = await fetch(`/api/friend-requests/${request.id}/decline`, { method: 'POST' });
+			if (res.ok) {
+				incoming = incoming.filter((r) => r.id !== request.id);
+				PENDING_REQUEST_COUNT.set(incoming.length);
+				haptic.trigger('light');
+				toast.success('Friend request declined');
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to decline friend request');
+			}
+		} catch {
+			toast.error('Failed to decline friend request');
+		} finally {
+			requestActionLoadingIds = requestActionLoadingIds.filter((id) => id !== request.id);
+		}
+	}
+
+	async function cancelRequest(request: RequestRow) {
+		if (requestActionLoadingIds.includes(request.id)) return;
+		requestActionLoadingIds = [...requestActionLoadingIds, request.id];
+		try {
+			const res = await fetch(`/api/friend-requests/${request.id}`, { method: 'DELETE' });
+			if (res.ok) {
+				outgoing = outgoing.filter((r) => r.id !== request.id);
+				haptic.trigger('light');
+				toast.success('Friend request cancelled');
+			} else {
+				const data = await res.json();
+				toast.error(data.message || 'Failed to cancel friend request');
+			}
+		} catch {
+			toast.error('Failed to cancel friend request');
+		} finally {
+			requestActionLoadingIds = requestActionLoadingIds.filter((id) => id !== request.id);
+		}
+	}
+
+	function openSendMoney(username: string) {
+		sendMoneyTarget = username;
+		sendMoneyModalOpen = true;
+	}
 </script>
 
-<SEO
-	title="Rugplay"
-	description="A realistic crypto trading simulator that lets you experience the risks and mechanics of decentralized exchanges without real financial consequences. Create coins, trade with liquidity pools, and learn about 'rug pulls' in a... relatively safe environment :)"
-	keywords="crypto simulation game, trading practice game, rug pull simulation, virtual cryptocurrency game"
-/>
+<SEO title="Friends - Rugplay" description="Manage your friends and friend requests on Rugplay." />
 
-<SignInConfirmDialog bind:open={shouldSignIn} />
+<SendMoneyModal bind:open={sendMoneyModalOpen} prefilledUsername={sendMoneyTarget} />
 
-<div class="container mx-auto p-6">
-	<header class="mb-8">
-		<h1 class="mb-2 truncate text-3xl font-bold">
-			{$USER_DATA ? getTimeBasedGreeting($USER_DATA?.name) : 'Welcome to Rugplay!'}
-		</h1>
-		<p class="text-muted-foreground">
-			{#if $USER_DATA}
-				Here's the market overview for today.
-			{:else}
-				You need to <button
-					class="text-primary underline hover:cursor-pointer"
-					onclick={() => (shouldSignIn = !shouldSignIn)}>sign in</button
-				>
-				to play.
-			{/if}
-		</p>
+<div class="container mx-auto max-w-2xl p-6">
+	<header class="mb-6 text-center">
+		<h1 class="mb-2 text-3xl font-bold">Friends</h1>
+		<p class="text-muted-foreground">Manage your friends and pending requests</p>
 	</header>
 
-	{#if loading}
-		<HomeSkeleton showSeason={!seasonData || !!seasonData.season} />
-	{:else if coins.length === 0}
-		<div class="flex h-96 items-center justify-center">
-			<div class="text-center">
-				<div class="text-muted-foreground mb-4 text-xl">No coins available</div>
-				<p class="text-muted-foreground text-sm">Be the first to create a coin!</p>
+	<div class="mb-6 flex items-center justify-center">
+		<div class="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]">
+			<div class="grid w-full max-w-xs grid-cols-2">
+				{#each tabs as tab}
+					<button
+						onclick={() => { haptic.trigger('selection'); activeTab = tab.value as 'friends' | 'requests'; }}
+						class="data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-2 py-1 text-sm font-medium transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm"
+						data-state={activeTab === tab.value ? 'active' : 'inactive'}
+					>
+						{tab.label}
+						{#if tab.value === 'requests' && $PENDING_REQUEST_COUNT > 0}
+							<Badge variant="default" class="ml-1 px-1.5 py-0 text-xs">{$PENDING_REQUEST_COUNT}</Badge>
+						{/if}
+					</button>
+				{/each}
 			</div>
 		</div>
-	{:else}
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-			{#if seasonData?.season}
-				<div class="order-last md:col-span-2 lg:order-none lg:col-span-1 lg:col-start-4 lg:row-span-2 lg:row-start-1">
-					<SeasonCard data={seasonData} />
-				</div>
-			{/if}
-			{#each coins.slice(0, 6) as coin (coin.symbol)}
-				<a href={`/coin/${coin.symbol}`} class="block h-full">
-					<Card.Root class="hover:bg-card/50 flex h-full flex-col gap-0 transition-all hover:shadow-md">
-						<Card.Header class="pb-4">
-							<Card.Title class="flex min-w-0 items-center gap-3">
-								<CoinIcon
-									icon={coin.icon}
-									symbol={coin.symbol}
-									name={coin.name}
-									size={10}
-									class="shrink-0"
-								/>
-								<div class="min-w-0 flex-1">
-									<div class="truncate text-base leading-tight font-semibold">{coin.name}</div>
-									<Badge
-										variant="secondary"
-										class="mt-1 max-w-full font-mono text-[11px] font-medium"
-									>
-										<span class="truncate">*{coin.symbol}</span>
-									</Badge>
-								</div>
-							</Card.Title>
-						</Card.Header>
+	</div>
 
-						<Card.Content class="flex flex-1 flex-col justify-center gap-2 py-2">
-							<span class="text-muted-foreground text-xs">Price</span>
-							<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-								<span class="text-3xl font-bold tracking-tight">${formatPrice(coin.price)}</span>
-								<Badge variant={coin.change24h >= 0 ? 'success' : 'destructive'} class="shrink-0">
-									{coin.change24h >= 0 ? '+' : ''}{coin.change24h.toFixed(2)}%
-								</Badge>
-							</div>
-						</Card.Content>
-
-						<Card.Footer class="mt-4 border-t pt-4">
-							<div class="grid w-full grid-cols-2 gap-3">
-								<div class="min-w-0">
-									<div class="text-muted-foreground text-xs">Market Cap</div>
-									<div class="truncate text-sm font-medium tabular-nums">
-										{formatMarketCap(coin.marketCap)}
-									</div>
-								</div>
-								<div class="min-w-0 text-right">
-									<div class="text-muted-foreground text-xs">24h Volume</div>
-									<div class="truncate text-sm font-medium tabular-nums">
-										{formatMarketCap(coin.volume24h)}
-									</div>
-								</div>
-							</div>
-						</Card.Footer>
-					</Card.Root>
-				</a>
-			{/each}
+	{#if loading}
+		<div class="py-12 text-center">
+			<HugeiconsIcon icon={Loading03Icon} class="text-muted-foreground mx-auto h-6 w-6 animate-spin" />
 		</div>
-
-		<div class="mt-12">
-			<h2 class="mb-4 text-2xl font-bold">Market Overview</h2>
+	{:else if activeTab === 'friends'}
+		<Card.Root>
+			<Card.Content class="space-y-2">
+				{#if friends.length === 0}
+					<div class="py-12 text-center">
+						<div class="bg-muted mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
+							<HugeiconsIcon icon={UserGroupIcon} class="text-muted-foreground h-8 w-8" />
+						</div>
+						<h3 class="mb-2 text-lg font-semibold">No friends yet</h3>
+						<p class="text-muted-foreground">Add friends from their profile page.</p>
+					</div>
+				{:else}
+					{#each friends as friend (friend.id)}
+						<div class="flex items-center justify-between rounded-lg border p-3">
+							<a
+								href="/user/{friend.username}"
+								class="flex min-w-0 items-center gap-3 hover:opacity-80"
+							>
+								<Avatar.Root class="h-10 w-10 shrink-0">
+									<Avatar.Image src={getPublicUrl(friend.image)} alt={friend.name} />
+									<Avatar.Fallback class="text-sm">{friend.name?.charAt(0) || '?'}</Avatar.Fallback>
+								</Avatar.Root>
+								<div class="min-w-0">
+									<div class="truncate text-sm font-medium">
+										<UserName name={friend.name} nameColor={friend.nameColor} />
+									</div>
+									<p class="text-muted-foreground truncate text-xs">@{friend.username}</p>
+								</div>
+							</a>
+							<Button variant="outline" size="sm" onclick={() => openSendMoney(friend.username)}>
+								<HugeiconsIcon icon={SentIcon} class="h-4 w-4" />
+								Send
+							</Button>
+						</div>
+					{/each}
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	{:else}
+		<div class="space-y-6">
 			<Card.Root>
-				<Card.Content>
-					<DataTable
-						columns={marketColumns}
-						data={coins}
-						onRowClick={(coin) => goto(`/coin/${coin.symbol}`)}
-					/>
+				<Card.Header>
+					<Card.Title class="text-base">Incoming requests</Card.Title>
+					<Card.Description>People who want to be friends with you</Card.Description>
+				</Card.Header>
+				<Card.Content class="space-y-2">
+					{#if incoming.length === 0}
+						<p class="text-muted-foreground text-sm">No incoming requests.</p>
+					{:else}
+						{#each incoming as request (request.id)}
+							<div class="flex items-center justify-between rounded-lg border p-3">
+								<a
+									href="/user/{request.user.username}"
+									class="flex min-w-0 items-center gap-3 hover:opacity-80"
+								>
+									<Avatar.Root class="h-10 w-10 shrink-0">
+										<Avatar.Image src={getPublicUrl(request.user.image)} alt={request.user.name} />
+										<Avatar.Fallback class="text-sm">{request.user.name?.charAt(0) || '?'}</Avatar.Fallback>
+									</Avatar.Root>
+									<div class="min-w-0">
+										<div class="truncate text-sm font-medium">
+											<UserName name={request.user.name} nameColor={request.user.nameColor} />
+										</div>
+										<p class="text-muted-foreground truncate text-xs">@{request.user.username}</p>
+									</div>
+								</a>
+								<div class="flex items-center gap-2">
+									<Button
+										variant="default"
+										size="sm"
+										onclick={() => acceptRequest(request)}
+										disabled={requestActionLoadingIds.includes(request.id)}
+									>
+										<HugeiconsIcon icon={Tick01Icon} class="h-4 w-4" />
+										Accept
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										onclick={() => declineRequest(request)}
+										disabled={requestActionLoadingIds.includes(request.id)}
+									>
+										Decline
+									</Button>
+								</div>
+							</div>
+						{/each}
+					{/if}
+				</Card.Content>
+			</Card.Root>
+
+			<Card.Root>
+				<Card.Header>
+					<Card.Title class="text-base">Outgoing requests</Card.Title>
+					<Card.Description>Requests you've sent that are still pending</Card.Description>
+				</Card.Header>
+				<Card.Content class="space-y-2">
+					{#if outgoing.length === 0}
+						<p class="text-muted-foreground text-sm">No outgoing requests.</p>
+					{:else}
+						{#each outgoing as request (request.id)}
+							<div class="flex items-center justify-between rounded-lg border p-3">
+								<a
+									href="/user/{request.user.username}"
+									class="flex min-w-0 items-center gap-3 hover:opacity-80"
+								>
+									<Avatar.Root class="h-10 w-10 shrink-0">
+										<Avatar.Image src={getPublicUrl(request.user.image)} alt={request.user.name} />
+										<Avatar.Fallback class="text-sm">{request.user.name?.charAt(0) || '?'}</Avatar.Fallback>
+									</Avatar.Root>
+									<div class="min-w-0">
+										<div class="truncate text-sm font-medium">
+											<UserName name={request.user.name} nameColor={request.user.nameColor} />
+										</div>
+										<p class="text-muted-foreground truncate text-xs">@{request.user.username}</p>
+									</div>
+								</a>
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={() => cancelRequest(request)}
+									disabled={requestActionLoadingIds.includes(request.id)}
+								>
+									<HugeiconsIcon icon={Cancel01Icon} class="h-4 w-4" />
+									Cancel
+								</Button>
+							</div>
+						{/each}
+					{/if}
 				</Card.Content>
 			</Card.Root>
 		</div>
