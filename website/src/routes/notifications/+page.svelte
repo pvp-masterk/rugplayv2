@@ -11,7 +11,10 @@
 		Settings01Icon,
 		TradeUpIcon,
 		Alert02Icon,
-		Target03Icon
+		Target03Icon,
+		UserAdd01Icon,
+		UserCheck01Icon,
+		UserGroupIcon
 	} from '@hugeicons/core-free-icons';
 	import { onMount } from 'svelte';
 	import {
@@ -58,6 +61,12 @@
 				return Alert02Icon;
 			case 'SYSTEM':
 				return Settings01Icon;
+			case 'FRIEND_REQUEST':
+				return UserAdd01Icon;
+			case 'FRIEND_ACCEPTED':
+				return UserCheck01Icon;
+			case 'NEW_FOLLOWER':
+				return UserGroupIcon;
 			default:
 				return Notification01Icon;
 		}
@@ -76,7 +85,10 @@
 				HOPIUM: 'bg-blue-50/50 dark:bg-blue-950/10',
 				TRANSFER: 'bg-green-50/50 dark:bg-green-950/10',
 				RUG_PULL: 'bg-red-50/50 dark:bg-red-950/10',
-				SYSTEM: 'bg-purple-50/50 dark:bg-purple-950/10'
+				SYSTEM: 'bg-purple-50/50 dark:bg-purple-950/10',
+				FRIEND_REQUEST: 'bg-pink-50/50 dark:bg-pink-950/10',
+				FRIEND_ACCEPTED: 'bg-pink-50/50 dark:bg-pink-950/10',
+				NEW_FOLLOWER: 'bg-indigo-50/50 dark:bg-indigo-950/10'
 			};
 			return `${base} ${colors[type as keyof typeof colors] || 'bg-muted/20'}`;
 		}
@@ -89,7 +101,10 @@
 			HOPIUM: 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400',
 			TRANSFER: 'bg-green-100 text-green-600 dark:bg-green-900/50 dark:text-green-400',
 			RUG_PULL: 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400',
-			SYSTEM: 'bg-purple-100 text-purple-600 dark:bg-purple-900/50 dark:text-purple-400'
+			SYSTEM: 'bg-purple-100 text-purple-600 dark:bg-purple-900/50 dark:text-purple-400',
+			FRIEND_REQUEST: 'bg-pink-100 text-pink-600 dark:bg-pink-900/50 dark:text-pink-400',
+			FRIEND_ACCEPTED: 'bg-pink-100 text-pink-600 dark:bg-pink-900/50 dark:text-pink-400',
+			NEW_FOLLOWER: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'
 		};
 		return colors[type as keyof typeof colors] || 'bg-muted text-muted-foreground';
 	}
