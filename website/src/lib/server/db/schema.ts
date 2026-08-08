@@ -31,6 +31,17 @@ export const newsReactionTypeEnum = pgEnum('news_reaction_type', ['LIKE', 'DISLI
 
 export const newsReportStatusEnum = pgEnum('news_report_status', ['OPEN', 'REVIEWED', 'DISMISSED']);
 
+// Cost, in base currency, to add a brand-new emoji reaction option to an
+// article. Once someone pays this, the emoji exists on the article and
+// everyone else can react with it for free (same as Discord: only adding
+// a *new* emoji to the picker costs anything).
+export const NEWS_REACTION_EMOJI_CREATE_COST = 5000;
+
+// Max distinct emoji reactions a single article can have. Keeps the bar
+// from becoming an unreadable wall and keeps the "first mover" slots
+// scarce/valuable, same spirit as the $5,000 cost itself.
+export const NEWS_REACTION_EMOJI_LIMIT = 6;
+
 export const user = pgTable("user", {
 	id: serial("id").primaryKey(),
 	name: text("name").notNull(),
@@ -648,6 +659,123 @@ export const newsArticleShare = pgTable(
 		return {
 			articleIdIdx: index('news_article_share_article_id_idx').on(table.articleId),
 			userIdIdx: index('news_article_share_user_id_idx').on(table.userId)
+		};
+	}
+);
+
+// Threaded discussion on news articles. Deliberately its own table rather
+// than reusing `comment` (which hard-requires a coinId) — an article may
+// have no related coin at all (PLATFORM/SEASON_EVENT articles), and
+// keeping these separate avoids a nullable-but-sometimes-required column
+// on the existing coin comment table.
+export const newsArticleComment = pgTable(
+	'news_article_comment',
+	{
+		id: serial('id').primaryKey(),
+		userId: integer('user_id').references(() => user.id, { onDelete: 'set null' }),
+		articleId: integer('article_id')
+			.notNull()
+			.references(() => newsArticle.id, { onDelete: 'cascade' }),
+		content: varchar('content', { length: 500 }).notNull(),
+		likesCount: integer('likes_count').notNull().default(0),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+		isDeleted: boolean('is_deleted').default(false).notNull()
+	},
+	(table) => {
+		return {
+			userIdIdx: index('news_article_comment_user_id_idx').on(table.userId),
+			articleIdIdx: index('news_article_comment_article_id_idx').on(table.articleId)
+		};
+	}
+);
+
+export const newsArticleCommentLike = pgTable(
+	'news_article_comment_like',
+	{
+		userId: integer('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		commentId: integer('comment_id')
+			.notNull()
+			.references(() => newsArticleComment.id, { onDelete: 'cascade' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => {
+		return {
+			pk: primaryKey({ columns: [table.userId, table.commentId] })
+		};
+	}
+);
+
+// --- Discord-style custom emoji reaction bar (separate from the simple
+// LIKE/DISLIKE sentiment vote in `newsArticleReaction` above) ---
+//
+// Two tables:
+//   1. newsArticleReactionEmoji — the *set of emoji options* live on a
+//      given article (max NEWS_REACTION_EMOJI_LIMIT). Row exists once
+//      someone pays NEWS_REACTION_EMOJI_CREATE_COST to add that emoji to
+//      that article. Records who paid, so the UI can credit them
+//      ("created by @username") the same way Discord shows who first
+//      reacted with a custom emoji.
+//   2. newsArticleReactionUser — who has reacted with which of those
+//      emoji. Many-to-many, unique per (user, emoji-row), so toggling is
+//      a straightforward insert/delete same as commentLike.
+//
+// Counts are read live via COUNT(*) grouped by emoji at request time
+// (article-scoped, max 6 emoji, so this is cheap) rather than a
+// denormalized counter column — avoids a second source of truth to keep
+// in sync across concurrent reacts, and the live websocket broadcast
+// (see routes/api/news/[id]/reactions) means clients never actually
+// issue that query themselves after the initial page load.
+export const newsArticleReactionEmoji = pgTable(
+	'news_article_reaction_emoji',
+	{
+		id: serial('id').primaryKey(),
+		articleId: integer('article_id')
+			.notNull()
+			.references(() => newsArticle.id, { onDelete: 'cascade' }),
+		// Native emoji character(s), e.g. "🚀". Validated server-side against
+		// a fixed allowlist (see lib/data/emoji-catalog.ts) — never
+		// arbitrary/custom image uploads, to keep this fast, cheap, and
+		// impossible to abuse for inappropriate imagery.
+		emoji: varchar('emoji', { length: 16 }).notNull(),
+		createdByUserId: integer('created_by_user_id').references(() => user.id, {
+			onDelete: 'set null'
+		}),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => {
+		return {
+			// One slot per distinct emoji per article — paying again for an
+			// emoji that's already on the article isn't a thing; you just
+			// react to the existing slot for free, same as Discord.
+			articleEmojiUnique: unique('news_article_reaction_emoji_article_emoji_unique').on(
+				table.articleId,
+				table.emoji
+			),
+			articleIdIdx: index('news_article_reaction_emoji_article_id_idx').on(table.articleId)
+		};
+	}
+);
+
+export const newsArticleReactionUser = pgTable(
+	'news_article_reaction_user',
+	{
+		userId: integer('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		reactionEmojiId: integer('reaction_emoji_id')
+			.notNull()
+			.references(() => newsArticleReactionEmoji.id, { onDelete: 'cascade' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => {
+		return {
+			pk: primaryKey({ columns: [table.userId, table.reactionEmojiId] }),
+			reactionEmojiIdIdx: index('news_article_reaction_user_emoji_id_idx').on(
+				table.reactionEmojiId
+			)
 		};
 	}
 );
