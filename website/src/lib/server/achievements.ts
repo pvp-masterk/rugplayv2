@@ -258,6 +258,27 @@ async function checkAchievement(
 			return totalPortfolio >= thresholds[achievementId];
 		}
 
+		// MYTHICAL
+		case 'portfolio_100t': {
+			const [userData] = await db
+				.select({ balance: user.baseCurrencyBalance })
+				.from(user)
+				.where(eq(user.id, userId))
+				.limit(1);
+			const cash = Number(userData?.balance ?? 0);
+
+			const [holdings] = await db
+				.select({
+					value: sql<string>`COALESCE(SUM(CAST(${userPortfolio.quantity} AS NUMERIC) * CAST(${coin.currentPrice} AS NUMERIC)), 0)`
+				})
+				.from(userPortfolio)
+				.leftJoin(coin, eq(userPortfolio.coinId, coin.id))
+				.where(eq(userPortfolio.userId, userId));
+
+			const totalPortfolio = cash + Number(holdings?.value ?? 0);
+			return totalPortfolio >= 100_000_000_000_000;
+		}
+
 		case 'broke': {
 			const [tradeCount] = await db
 				.select({ cnt: count() })
@@ -591,6 +612,29 @@ async function awardAchievement(userId: number, achievementId: string): Promise<
 			.returning({ id: userAchievement.id });
 
 		if (result.length === 0) return false;
+
+		// Mythical achievements grant their reward (the exclusive name color)
+		// instantly and permanently, rather than waiting for the user to
+		// visit /achievements and hit claim like every other achievement.
+		// The cash/gem reward is still claimed normally through the usual
+		// flow — only the cosmetic itself is auto-applied here.
+		if (def.category === 'mythical') {
+			await db
+				.update(user)
+				.set({ nameColor: 'ascended', updatedAt: new Date() })
+				.where(eq(user.id, userId));
+
+			await createNotification(
+				userId.toString(),
+				'SYSTEM',
+				`🌌 MYTHICAL: ${def.name}`,
+				`You've ascended. Your portfolio crossed $100 trillion — the "Ascended" name color has been permanently and automatically applied to your account. Visit /achievements to claim your reward.`,
+				'/achievements',
+				{ achievementIcon: def.icon }
+			);
+
+			return true;
+		}
 
 		await createNotification(
 			userId.toString(),
