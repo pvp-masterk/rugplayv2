@@ -150,3 +150,32 @@
   background-size: 200% auto;
   animation: diamond-shimmer 4s ease-in-out infinite;
 }
+
+/* Mythical name color — text base shimmer + floating sparkle particles.
+   Used only by the 'ascended' color, granted exclusively at the
+   $100,000,000,000,000 total portfolio value milestone. */
+@keyframes mythical-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-mythical-shimmer {
+  background-size: 200% auto;
+  animation: mythical-shimmer 3.5s ease-in-out infinite;
+}
+
+@keyframes mythical-sparkle-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(90deg); }
+}
+
+.mythical-sparkle {
+  position: absolute;
+  pointer-events: none;
+  color: #e9d5ff;
+  text-shadow: 0 0 4px #d946ef, 0 0 8px #a21caf;
+  animation-name: mythical-sparkle-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
