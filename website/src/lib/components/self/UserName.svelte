@@ -16,11 +16,20 @@
 	// Fixed, deliberately-hand-placed sparkle positions/timings rather than
 	// random per-render — keeps it visually consistent instead of jittering
 	// every time the component re-mounts.
+	//
+	// Kept strictly inside the 0–100% box (nothing negative, nothing at
+	// exactly 100%) on purpose: UserName renders inside all kinds of
+	// containers across the app (comment rows, leaderboard cells, hover
+	// card triggers, etc), many of which use `truncate`/`overflow-hidden`
+	// for layout. Sparkles that poke outside their own bounding box get
+	// silently clipped by any such ancestor — moving them inward instead
+	// of relying on ancestors to allow overflow fixes that everywhere at
+	// once instead of patching each call site.
 	const SPARKLES = [
-		{ top: '-6px', left: '-4px', size: '10px', delay: '0s', duration: '2.2s' },
-		{ top: '2px', left: '100%', size: '8px', delay: '0.6s', duration: '2.6s' },
-		{ top: '85%', left: '15%', size: '7px', delay: '1.1s', duration: '2.1s' },
-		{ top: '70%', left: '90%', size: '9px', delay: '1.6s', duration: '2.4s' }
+		{ top: '2%', left: '2%', size: '9px', delay: '0s', duration: '2.2s' },
+		{ top: '8%', left: '88%', size: '8px', delay: '0.6s', duration: '2.6s' },
+		{ top: '78%', left: '18%', size: '7px', delay: '1.1s', duration: '2.1s' },
+		{ top: '65%', left: '82%', size: '8px', delay: '1.6s', duration: '2.4s' }
 	];
 </script>
 
