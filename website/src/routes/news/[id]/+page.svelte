@@ -19,6 +19,8 @@
 	import CoinIcon from '$lib/components/self/CoinIcon.svelte';
 	import UserName from '$lib/components/self/UserName.svelte';
 	import NewsArticleActions from '$lib/components/self/NewsArticleActions.svelte';
+	import NewsReactionBar from '$lib/components/self/NewsReactionBar.svelte';
+	import NewsCommentSection from '$lib/components/self/NewsCommentSection.svelte';
 	import SignInConfirmDialog from '$lib/components/self/SignInConfirmDialog.svelte';
 	import { NEWS_TYPE_META } from '$lib/data/news-meta';
 	import { getPublicUrl } from '$lib/utils';
@@ -243,8 +245,16 @@
 					onCopyLink={() => handleCopyLink()}
 				/>
 			</div>
+
+			<div class="border-t pt-4">
+				<NewsReactionBar articleId={article.id} />
+			</div>
 		</Card.Content>
 	</Card.Root>
+
+	<div class="mt-6">
+		<NewsCommentSection articleId={article.id} />
+	</div>
 </div>
 
 <SignInConfirmDialog bind:open={shouldSignIn} />
