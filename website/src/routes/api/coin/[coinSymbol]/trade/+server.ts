@@ -407,7 +407,7 @@ export async function POST({ params, request }) {
     }
 
     if (txResult.tradeType === 'BUY') {
-        checkAndAwardAchievements(userId, ['trading', 'wealth', 'special'], {
+        checkAndAwardAchievements(userId, ['trading', 'wealth', 'special', 'mythical'], {
             tradeType: 'BUY',
             tradeAmount: txResult.totalCost,
             coinChange24h: txResult.coinChange24h,
@@ -428,7 +428,7 @@ export async function POST({ params, request }) {
             newBalance: txResult.newBalance
         });
     } else {
-        checkAndAwardAchievements(userId, ['trading', 'wealth', 'creation', 'special'], {
+        checkAndAwardAchievements(userId, ['trading', 'wealth', 'creation', 'special', 'mythical'], {
             tradeType: 'SELL',
             tradeAmount: txResult.totalCost,
             coinChange24h: txResult.coinChange24h,
