@@ -42,6 +42,19 @@ export const POST: RequestHandler = async ({ request }) => {
 		.set({ [userColumn]: itemKey, updatedAt: new Date() })
 		.where(eq(user.id, userId));
 
+	// The session used across the site is cached server-side for up to 5
+	// minutes (see hooks.server.ts) for performance. Without clearing it
+	// here, an equip would write to the DB correctly but the cached
+	// session — which is what every other page reads nameColor/cardStyle/
+	// cardAnimation from — would keep serving the pre-equip value until
+	// the cache naturally expired, making the change look like it "didn't
+	// take" outside of the page that made the request.
+	try {
+		const { clearUserCache } = await import('$lib/../hooks.server.js');
+		clearUserCache(userId.toString());
+	} catch (e) {
+		console.warn('Failed to clear user cache after equip:', e);
+	}
+
 	return json({ success: true });
 };
-
