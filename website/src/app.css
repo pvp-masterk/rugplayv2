@@ -282,27 +282,49 @@
 .profile-card-anim-shine-hover {
   position: relative;
   overflow: hidden;
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient(var(--card), var(--card)),
+    linear-gradient(120deg, #fbbf24, #f472b6, #818cf8, #fbbf24);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  background-size: 100% 100%, 300% 300%;
+  animation: shine-border-drift 5s ease infinite;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+.profile-card-anim-shine-hover:hover {
+  box-shadow: 0 0 24px -4px rgb(251 191 36 / 0.5), 0 0 48px -12px rgb(244 114 182 / 0.4);
+  transform: translateY(-2px);
+}
+@keyframes shine-border-drift {
+  0% { background-position: 0% 0%, 0% 50%; }
+  50% { background-position: 0% 0%, 100% 50%; }
+  100% { background-position: 0% 0%, 0% 50%; }
 }
 .profile-card-anim-shine-hover::after {
   content: '';
   position: absolute;
-  top: 0;
+  inset: 0;
   left: -150%;
   width: 60%;
-  height: 100%;
   background: linear-gradient(
     100deg,
     transparent,
-    color-mix(in oklab, white 35%, transparent),
+    color-mix(in oklab, white 55%, transparent),
+    color-mix(in oklab, #fbbf24 60%, transparent),
     transparent
   );
   pointer-events: none;
-  transition: left 0.6s ease;
+  transition: left 0.7s ease;
+  filter: blur(2px);
 }
 .profile-card-anim-shine-hover:hover::after {
   left: 140%;
 }
+.profile-card-anim-shine-active:active {
+  transform: translateY(0) scale(0.99);
+}
 .profile-card-anim-shine-active:active::after {
   left: 140%;
-  transition: left 0.15s ease;
+  transition: left 0.2s ease;
 }
