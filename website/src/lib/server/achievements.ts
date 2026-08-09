@@ -15,7 +15,20 @@ import {
 import { eq, and, sql, count, gte, gt, ne } from 'drizzle-orm';
 import { ACHIEVEMENTS_MAP, ACHIEVEMENTS } from '$lib/data/achievements';
 import type { AchievementDef } from '$lib/data/achievements';
+import { CARD_STYLE_CATALOG, CARD_ANIMATION_CATALOG } from '$lib/data/card-catalog';
 import { createNotification } from './notification';
+
+// Achievement id -> cosmetic items it grants, derived from the card
+// catalog itself (each catalog entry names the achievement that unlocks
+// it) so the catalog stays the single source of truth instead of this
+// list drifting out of sync with it.
+const CARD_ITEM_REWARDS: Record<string, Array<{ itemType: 'cardstyle' | 'cardanimation'; itemKey: string }>> = {};
+for (const s of CARD_STYLE_CATALOG) {
+	(CARD_ITEM_REWARDS[s.achievementId] ??= []).push({ itemType: 'cardstyle', itemKey: s.key });
+}
+for (const a of CARD_ANIMATION_CATALOG) {
+	(CARD_ITEM_REWARDS[a.achievementId] ??= []).push({ itemType: 'cardanimation', itemKey: a.key });
+}
 
 export interface AchievementContext {
 	tradeType?: 'BUY' | 'SELL';
@@ -612,6 +625,24 @@ async function awardAchievement(userId: number, achievementId: string): Promise<
 			.returning({ id: userAchievement.id });
 
 		if (result.length === 0) return false;
+
+		// Card style/animation cosmetics: data-driven off CARD_ITEM_REWARDS
+		// so any achievement (including mythical ones, checked below) can
+		// grant one without new code here. This adds to userInventory (so
+		// the item shows up as owned/equippable in Settings) rather than
+		// force-equipping it — a user may already have something else
+		// equipped and shouldn't be silently switched.
+		const cardRewards = CARD_ITEM_REWARDS[achievementId];
+		if (cardRewards?.length) {
+			for (const reward of cardRewards) {
+				await db
+					.insert(userInventory)
+					.values({ userId, itemType: reward.itemType, itemKey: reward.itemKey })
+					.onConflictDoNothing({
+						target: [userInventory.userId, userInventory.itemType, userInventory.itemKey]
+					});
+			}
+		}
 
 		// Mythical achievements grant their reward (the exclusive name color)
 		// instantly and permanently, rather than waiting for the user to
