@@ -12,7 +12,13 @@ This started as "I'll just add one feature" and has since turned into a full v2.
 
 ## What's new here that wasn't in upstream
 
-- 📰 **AI news feed.** Market stuff (trades, new coin launches, prediction markets resolving, rug pulls) actually gets written up into news articles now. An AI writes them first, and if that fails or times out for whatever reason it quietly falls back to a template writer so the feed never just goes silent. Articles pull a cover image automatically (coin icon, someone's avatar, or a themed stock photo), and you can react to them, report them, or share them out.
+- 📰 **AI news feed.** Market stuff (trades, new coin launches, prediction markets resolving, rug pulls) actually gets written up into news articles now. An AI writes them first, and if that fails or times out for whatever reason it quietly falls back to a template writer so the feed never just goes silent. Articles pull a cover image automatically (coin icon, someone's avatar, or a themed stock photo).
+  - React to articles with a curated emoji set, comment on them (with @mention autocomplete), report bad ones, share them out, and view counts/dwell tracking feed a trending score
+  - Per-coin, per-event-type cooldowns (24h) stop a thin-liquidity coin getting dumped once from flooding the feed with near-identical "dramatic" articles
+- 🗒️ **Admin-managed changelog.** A "What's New" modal greets users with the latest release notes (new/improved/fixed/removed, categorized), backed by an admin panel to author releases rather than hand-editing a source file.
+- 💬 **@mention autocomplete.** Typing `@` in a comment (coin or news) pops up a live user search dropdown, keyboard-navigable, avatar and bio included.
+- 🔍 **Smart search.** Opt-in setting that widens user search from username-only to also match display name and bio, with trigram similarity ranking.
+- 🪪 **Equippable profile cards.** Achievement-granted visual styles and hover/click animations for your profile header card, previewed live in Settings before equipping.
 - 🎲 **Arcade keeps growing.** Coinflip, Dice, Slots, Tower, Mines, all still there, and new games get added on top following the same server side RNG and house edge rules as everything else so nothing's client trusted.
 - ☁️ **Vercel support.** Added the Vercel adapter so this can be deployed there directly, on top of the existing Docker setup.
 - 🔧 A bunch of stuff under the hood has been rewritten too, the AMM engine, the db schema, the job scheduler, the websocket layer, mostly invisible to users but it's there.
@@ -26,7 +32,6 @@ This list will go stale, honestly. The code's the real source of truth at this p
 - 🔴 Sell coins
 - ⚖️ Predict on questions, kind of like Polymarket
 - 🎲 Arcade games
-- 📰 News feed
 - 📊 Treemap of the whole market
 - 🏆 Leaderboards
 
