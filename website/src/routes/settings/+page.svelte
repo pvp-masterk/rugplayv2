@@ -135,11 +135,16 @@
 			if (res.ok) {
 				if (itemType === 'cardstyle') {
 					equippedCardStyle = itemKey;
-					if ($USER_DATA) $USER_DATA = { ...$USER_DATA, cardStyle: itemKey };
 				} else {
 					equippedCardAnimation = itemKey;
-					if ($USER_DATA) $USER_DATA = { ...$USER_DATA, cardAnimation: itemKey };
 				}
+				// Refreshes the layout's session data (USER_DATA), so every
+				// page — not just this local state — reflects the new
+				// equip immediately instead of waiting on the server-side
+				// session cache to expire, or getting silently overwritten
+				// back to the old value the next time +layout.svelte's
+				// effect re-syncs USER_DATA from stale load data.
+				await invalidateAll();
 				haptic.trigger('light');
 				toast.success(itemKey ? 'Equipped!' : 'Unequipped');
 			} else {
