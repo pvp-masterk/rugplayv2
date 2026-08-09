@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 export const transactionTypeEnum = pgEnum('transaction_type', ['BUY', 'SELL', 'TRANSFER_IN', 'TRANSFER_OUT']);
 export const predictionMarketEnum = pgEnum('prediction_market_status', ['ACTIVE', 'RESOLVED', 'CANCELLED']);
 export const notificationTypeEnum = pgEnum('notification_type', ['HOPIUM', 'SYSTEM', 'TRANSFER', 'RUG_PULL', 'MENTION']);
-export const shopItemTypeEnum = pgEnum('shop_item_type', ['namecolor']);
+export const shopItemTypeEnum = pgEnum('shop_item_type', ['namecolor', 'cardstyle', 'cardanimation']);
 export const seasonStatusEnum = pgEnum('season_status', ['UPCOMING', 'ACTIVE', 'ENDED']);
 export const seasonTrophyTierEnum = pgEnum('season_trophy_tier', ['CHAMPION', 'RUNNER_UP', 'THIRD', 'TOP_10', 'TOP_100', 'PARTICIPANT']);
 
@@ -93,6 +93,8 @@ export const user = pgTable("user", {
 	halloweenBadge2025: boolean("halloween_badge_2025").default(false),
 	gems: integer("gems").notNull().default(0),
 	nameColor: text("name_color"),
+	cardStyle: text("card_style"),
+	cardAnimation: text("card_animation"),
 	founderBadge: boolean("founder_badge").notNull().default(false),
 	disableMentions: boolean("disable_mentions").notNull().default(false),
 }, (table) => {
