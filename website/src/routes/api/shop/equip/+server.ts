@@ -5,6 +5,12 @@ import { eq, and } from 'drizzle-orm';
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
+const EQUIPPABLE_ITEM_TYPES = {
+	namecolor: 'nameColor',
+	cardstyle: 'cardStyle',
+	cardanimation: 'cardAnimation',
+} as const;
+
 export const POST: RequestHandler = async ({ request }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
 	if (!session?.user) throw error(401, 'Unauthorized');
@@ -13,7 +19,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
 	const { itemType, itemKey } = body as { itemType: string; itemKey: string | null };
 
-	if (itemType !== 'namecolor') {
+	const userColumn = EQUIPPABLE_ITEM_TYPES[itemType as keyof typeof EQUIPPABLE_ITEM_TYPES];
+	if (!userColumn) {
 		return json({ error: 'Invalid item type' }, { status: 400 });
 	}
 
@@ -21,7 +28,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const owned = await db.query.userInventory.findFirst({
 			where: and(
 				eq(userInventory.userId, userId),
-				eq(userInventory.itemType, 'namecolor'),
+				eq(userInventory.itemType, itemType as typeof userInventory.$inferSelect.itemType),
 				eq(userInventory.itemKey, itemKey),
 			),
 		});
@@ -32,8 +39,9 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	await db
 		.update(user)
-		.set({ nameColor: itemKey, updatedAt: new Date() })
+		.set({ [userColumn]: itemKey, updatedAt: new Date() })
 		.where(eq(user.id, userId));
 
 	return json({ success: true });
 };
+
