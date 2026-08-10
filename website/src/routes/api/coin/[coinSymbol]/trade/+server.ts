@@ -8,6 +8,7 @@ import { createNotification } from '$lib/server/notification';
 import { calculate24hMetrics, executeSellTrade } from '$lib/server/amm';
 import { checkAndAwardAchievements } from '$lib/server/achievements';
 import { publishNewsEvent } from '$lib/server/news/pipeline';
+import { creditTreasury } from '$lib/server/treasury';
 import { SWAP_FEE_RATE } from '$lib/data/constants';
 
 export async function POST({ params, request }) {
@@ -57,7 +58,8 @@ export async function POST({ params, request }) {
             tradingUnlocksAt: coin.tradingUnlocksAt,
             isLocked: coin.isLocked,
             change24h: coin.change24h,
-            createdAt: coin.createdAt
+            createdAt: coin.createdAt,
+            maxHolderPercent: coin.maxHolderPercent
         }).from(coin).where(eq(coin.symbol, normalizedSymbol)).for('update').limit(1);
 
         if (!coinData) {
@@ -125,13 +127,6 @@ export async function POST({ params, request }) {
                 throw error(400, 'Trade amount too small - would result in zero tokens');
             }
 
-            await tx.update(user)
-                .set({
-                    baseCurrencyBalance: (userBalance - totalCost).toString(),
-                    updatedAt: new Date()
-                })
-                .where(eq(user.id, userId));
-
             const [existingHolding] = await tx
                 .select({ quantity: userPortfolio.quantity })
                 .from(userPortfolio)
@@ -141,8 +136,31 @@ export async function POST({ params, request }) {
                 ))
                 .limit(1);
 
+            const existingQuantity = existingHolding ? Number(existingHolding.quantity) : 0;
+
+            // Per-wallet holding cap (currently only set on the official
+            // RugPlay Bank coin) — checked before any writes so a rejected
+            // buy leaves no trace.
+            if (coinData.maxHolderPercent) {
+                const capPercent = Number(coinData.maxHolderPercent);
+                const circulating = Number(coinData.circulatingSupply);
+                const maxHoldable = circulating * (capPercent / 100);
+                const projectedHolding = existingQuantity + coinsBought;
+                if (projectedHolding > maxHoldable) {
+                    const roomLeft = Math.max(0, maxHoldable - existingQuantity);
+                    throw error(400, `This coin caps holdings at ${capPercent}% of supply (${maxHoldable.toFixed(2)} ${normalizedSymbol} max per wallet). You have room for ${roomLeft.toFixed(2)} more.`);
+                }
+            }
+
+            await tx.update(user)
+                .set({
+                    baseCurrencyBalance: (userBalance - totalCost).toString(),
+                    updatedAt: new Date()
+                })
+                .where(eq(user.id, userId));
+
             if (existingHolding) {
-                const newQuantity = Number(existingHolding.quantity) + coinsBought;
+                const newQuantity = existingQuantity + coinsBought;
                 await tx.update(userPortfolio)
                     .set({
                         quantity: newQuantity.toString(),
@@ -168,6 +186,15 @@ export async function POST({ params, request }) {
                 pricePerCoin: (totalCost / coinsBought).toString(),
                 totalBaseCurrencyAmount: totalCost.toString()
             });
+
+            if (feeAmount > 0) {
+                await creditTreasury(feeAmount, 'TRADING_FEE', {
+                    userId,
+                    referenceType: 'coin',
+                    referenceId: coinData.id,
+                    description: `BUY fee on ${normalizedSymbol}`
+                }, tx);
+            }
 
             await tx.insert(priceHistory).values({
                 coinId: coinData.id,
@@ -332,6 +359,15 @@ export async function POST({ params, request }) {
                         eq(userPortfolio.userId, userId),
                         eq(userPortfolio.coinId, coinData.id)
                     ));
+            }
+
+            if (feeAmount > 0) {
+                await creditTreasury(feeAmount, 'TRADING_FEE', {
+                    userId,
+                    referenceType: 'coin',
+                    referenceId: coinData.id,
+                    description: `SELL fee on ${normalizedSymbol}`
+                }, tx);
             }
 
             const metrics = sellResult.metrics || await calculate24hMetrics(coinData.id, newPrice, tx);
