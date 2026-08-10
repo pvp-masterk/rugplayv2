@@ -53,7 +53,8 @@
 					icon: row.icon,
 					symbol: row.symbol,
 					name: row.name,
-					size: 6
+					size: 6,
+					isOfficial: row.isOfficial
 				};
 			}
 		},
@@ -140,12 +141,22 @@
 								/>
 								<div class="min-w-0 flex-1">
 									<div class="truncate text-base leading-tight font-semibold">{coin.name}</div>
-									<Badge
-										variant="secondary"
-										class="mt-1 max-w-full font-mono text-[11px] font-medium"
-									>
-										<span class="truncate">*{coin.symbol}</span>
-									</Badge>
+									<div class="mt-1 flex flex-wrap items-center gap-1.5">
+										<Badge
+											variant="secondary"
+											class="max-w-full font-mono text-[11px] font-medium"
+										>
+											<span class="truncate">*{coin.symbol}</span>
+										</Badge>
+										{#if coin.isOfficial}
+											<Badge
+												variant="outline"
+												class="border-amber-500/60 bg-amber-500/10 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+											>
+												✓ OFFICIAL
+											</Badge>
+										{/if}
+									</div>
 								</div>
 							</Card.Title>
 						</Card.Header>
