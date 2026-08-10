@@ -16,7 +16,8 @@
 		"lint": "prettier --check .",
 		"db:push": "drizzle-kit push",
 		"db:migrate": "drizzle-kit migrate",
-		"db:studio": "drizzle-kit studio"
+		"db:studio": "drizzle-kit studio",
+		"db:seed-bank": "bun run scripts/seed-bank.ts"
 	},
 	"devDependencies": {
 		"@internationalized/date": "^3.10.0",
