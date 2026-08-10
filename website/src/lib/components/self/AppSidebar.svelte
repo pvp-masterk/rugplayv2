@@ -67,6 +67,7 @@
 		navMain: [
 			{ title: 'Home', url: '/', icon: Home03Icon },
 			{ title: 'Market', url: '/market', icon: Store01Icon },
+			{ title: 'Bank', url: '/bank', icon: PiggyBankIcon },
 			{ title: 'News', url: '/news', icon: Globe02Icon },
 			{ title: 'Hopium', url: '/hopium', icon: ArrowUpDownIcon },
 			{ title: 'Arcade', url: '/arcade', icon: Joystick04Icon },
