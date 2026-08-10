@@ -151,9 +151,9 @@
 										{#if coin.isOfficial}
 											<Badge
 												variant="outline"
-												class="border-amber-500/60 bg-amber-500/10 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+												class="border-[oklch(0.795_0.184_86.047)]/50 bg-[oklch(0.795_0.184_86.047)]/10 text-[10px] font-semibold text-[oklch(0.55_0.15_86)] dark:text-[oklch(0.795_0.184_86.047)]"
 											>
-												✓ OFFICIAL
+												● OFFICIAL
 											</Badge>
 										{/if}
 									</div>
