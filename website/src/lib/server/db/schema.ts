@@ -172,10 +172,25 @@ export const coin = pgTable("coin", {
 	isListed: boolean("is_listed").default(true).notNull(),
 	tradingUnlocksAt: timestamp("trading_unlocks_at"),
 	isLocked: boolean("is_locked").default(true).notNull(),
+
+	// Set only by the RugPlay Bank seed script (see scripts/seed-bank.ts),
+	// never reachable from the coin creation endpoint. Pins the coin above
+	// the rest of the market on the homepage/market/coin pages and shows
+	// the "OFFICIAL" badge, so an impersonating coin can't fake this by
+	// copying the name/icon.
+	isOfficial: boolean("is_official").notNull().default(false),
+
+	// Optional per-wallet holding cap, as a percent of circulatingSupply
+	// (e.g. "2.00" = no single holder can hold more than 2% of supply).
+	// Null means uncapped. Enforced at BUY time in the trade endpoint.
+	// General-purpose column, not official-coin-specific, but currently
+	// only set on the RugPlay Bank coin.
+	maxHolderPercent: decimal("max_holder_percent", { precision: 5, scale: 2 }),
 }, (table) => {
 	return {
 		creatorIdIdx: index("coin_creator_id_idx").on(table.creatorId),
 		isListedIdx: index("coin_is_listed_idx").on(table.isListed),
+		isOfficialIdx: index("coin_is_official_idx").on(table.isOfficial),
 		nameTrgmIdx: index("coin_name_trgm_idx").using("gin", table.name.op("gin_trgm_ops")),
 		symbolTrgmIdx: index("coin_symbol_trgm_idx").using("gin", table.symbol.op("gin_trgm_ops")),
 		marketCapIdx: index("coin_market_cap_idx").on(table.marketCap),
@@ -837,6 +852,71 @@ export const changelogChange = pgTable(
 	(table) => {
 		return {
 			releaseIdIdx: index('changelog_change_release_id_idx').on(table.releaseId)
+		};
+	}
+);
+
+// --- RugPlay Bank -----------------------------------------------------
+//
+// The treasury is the counterparty for currency that used to just
+// appear/vanish: trading fees and cash transfer fees were silently burned,
+// daily rewards/arcade payouts/promo codes minted from nowhere. Now every
+// one of those either credits or debits this singleton row, with a
+// ledger entry recorded alongside it. See $lib/server/treasury.ts for the
+// helpers that keep the two in sync.
+//
+// Only a subset of sources are wired up today (TRADING_FEE, CASH_TRANSFER_FEE
+// credit the treasury; DAILY_REWARD debits it). The rest of the enum is
+// provisioned for the same treatment later without another migration.
+
+export const treasuryLedgerDirectionEnum = pgEnum('treasury_ledger_direction', ['IN', 'OUT']);
+
+export const treasuryLedgerSourceEnum = pgEnum('treasury_ledger_source', [
+	'TRADING_FEE', // AMM swap fee (SWAP_FEE_RATE), wired up
+	'CASH_TRANSFER_FEE', // user-to-user cash transfer fee, wired up
+	'DAILY_REWARD', // daily login reward payout, wired up
+	'ARCADE_HOUSE_EDGE', // net player losses across arcade games — not wired yet
+	'ARCADE_PAYOUT', // net player wins across arcade games — not wired yet
+	'PROMO_CODE', // promo code redemption payout — not wired yet
+	'PREDICTION_MARKET_FEE', // hopium resolution fee/rake — not wired yet
+	'ADMIN_ADJUSTMENT', // manual admin correction
+	'SEED' // initial capitalization from the seed script
+]);
+
+// Singleton row — always id = 1. Balance is deliberately allowed to go
+// negative (see debitTreasury in $lib/server/treasury.ts): payouts are
+// never blocked on solvency today, a deficit is just a visible signal on
+// /bank rather than a silent failure.
+export const treasury = pgTable('treasury', {
+	id: integer('id').primaryKey().default(1),
+	balance: decimal('balance', { precision: 30, scale: 8 }).notNull().default('0.00000000'),
+	totalInflow: decimal('total_inflow', { precision: 30, scale: 8 }).notNull().default('0.00000000'),
+	totalOutflow: decimal('total_outflow', { precision: 30, scale: 8 }).notNull().default('0.00000000'),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+export const treasuryLedger = pgTable(
+	'treasury_ledger',
+	{
+		id: serial('id').primaryKey(),
+		direction: treasuryLedgerDirectionEnum('direction').notNull(),
+		source: treasuryLedgerSourceEnum('source').notNull(),
+		amount: decimal('amount', { precision: 30, scale: 8 }).notNull(),
+		// Treasury balance immediately after this entry was applied — cheap
+		// audit trail, lets /bank render a running balance without replaying
+		// the whole ledger.
+		balanceAfter: decimal('balance_after', { precision: 30, scale: 8 }).notNull(),
+		userId: integer('user_id').references(() => user.id, { onDelete: 'set null' }),
+		referenceType: varchar('reference_type', { length: 50 }),
+		referenceId: integer('reference_id'),
+		description: text('description'),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => {
+		return {
+			createdAtIdx: index('treasury_ledger_created_at_idx').on(table.createdAt),
+			sourceIdx: index('treasury_ledger_source_idx').on(table.source),
+			userIdIdx: index('treasury_ledger_user_id_idx').on(table.userId)
 		};
 	}
 );
