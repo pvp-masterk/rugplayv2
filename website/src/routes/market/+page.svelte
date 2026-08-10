@@ -462,7 +462,17 @@
 							<div class="flex items-center gap-3">
 								<CoinIcon icon={coin.icon} symbol={coin.symbol} size={8} />
 								<div>
-									<h3 class="truncate max-w-44 text-lg font-semibold leading-tight">{coin.name}</h3>
+									<div class="flex items-center gap-1.5">
+										<h3 class="truncate max-w-44 text-lg font-semibold leading-tight">{coin.name}</h3>
+										{#if coin.isOfficial}
+											<Badge
+												variant="outline"
+												class="shrink-0 border-amber-500/60 bg-amber-500/10 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+											>
+												✓ OFFICIAL
+											</Badge>
+										{/if}
+									</div>
 									<p class="text-muted-foreground truncate text-sm">*{coin.symbol}</p>
 								</div>
 							</div>
