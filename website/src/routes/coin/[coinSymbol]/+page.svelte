@@ -572,9 +572,9 @@
 							{#if coin.isOfficial}
 								<Badge
 									variant="outline"
-									class="border-amber-500/60 bg-amber-500/10 text-xs font-semibold text-amber-600 sm:text-sm dark:text-amber-400"
+									class="border-[oklch(0.795_0.184_86.047)]/50 bg-[oklch(0.795_0.184_86.047)]/10 text-xs font-semibold text-[oklch(0.55_0.15_86)] sm:text-sm dark:text-[oklch(0.795_0.184_86.047)]"
 								>
-									✓ OFFICIAL
+									● OFFICIAL
 								</Badge>
 							{/if}
 							{#if $isConnectedStore}
@@ -618,7 +618,7 @@
 			<!-- Creator Info -->
 			{#if coin.isOfficial}
 				<div class="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
-					<HugeiconsIcon icon={TradeUpIcon} class="h-4 w-4 text-amber-500" />
+					<HugeiconsIcon icon={TradeUpIcon} class="h-4 w-4 text-[oklch(0.795_0.184_86.047)]" />
 					<span
 						>Issued directly by <span class="text-foreground font-medium">RugPlay Bank</span> — no
 						individual owner. If you see this coin's name or icon anywhere else, it's an
